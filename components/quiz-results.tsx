@@ -8,18 +8,69 @@ import { CheckCircle, XCircle, Trophy, Clock, BarChart, Share2 } from "lucide-re
 import Link from "next/link"
 import confetti from "canvas-confetti"
 
+interface Answer {
+  id: number
+  question_id: number
+  answer_text: string
+  is_correct: boolean
+}
+
+interface Question {
+  id: number
+  quiz_id: number
+  question: string
+  image_url: string | null
+  points: number
+  time_limit: number
+  order_num: number
+  answers?: Answer[]
+}
+
+interface Quiz {
+  id: number
+  title: string
+  description: string
+  image_url: string
+  difficulty: string
+  time_limit: number
+  created_by: number
+  created_at: string
+  creator_name: string
+  questions: Question[]
+}
+
 interface QuizResultsProps {
-  quiz: any
+  quiz: Quiz
   score: number
-  userAnswers: Record<number, string>
+  userAnswers: Record<number, string> // question_id -> answer_id (as string)
   timeTaken: number
 }
 
 export function QuizResults({ quiz, score, userAnswers, timeTaken }: QuizResultsProps) {
   const [showConfetti, setShowConfetti] = useState(true)
-  const maxScore = quiz.questions.reduce((acc: number, q: any) => acc + q.points, 0)
+  const maxScore = quiz.questions.reduce((acc: number, q: Question) => acc + q.points, 0)
   const percentage = Math.round((score / maxScore) * 100)
-  const correctAnswers = quiz.questions.filter((q: any) => userAnswers[q.id] === q.correctAnswer).length
+  
+  // Helper function to get correct answer for a question
+  const getCorrectAnswer = (question: Question): Answer | null => {
+    return question.answers?.find(answer => answer.is_correct) || null
+  }
+  
+  // Helper function to get user's selected answer for a question
+  const getUserSelectedAnswer = (question: Question): Answer | null => {
+    const userAnswerId = userAnswers[question.id]
+    if (!userAnswerId) return null
+    return question.answers?.find(answer => answer.id === parseInt(userAnswerId)) || null
+  }
+  
+  // Calculate correct answers count
+  const correctAnswers = quiz.questions.filter((question) => {
+    const userAnswerId = userAnswers[question.id]
+    if (!userAnswerId) return false
+    
+    const correctAnswer = getCorrectAnswer(question)
+    return correctAnswer && correctAnswer.id === parseInt(userAnswerId)
+  }).length
 
   useEffect(() => {
     if (showConfetti && percentage >= 70) {
@@ -183,53 +234,61 @@ export function QuizResults({ quiz, score, userAnswers, timeTaken }: QuizResults
       >
         <h2 className="text-xl font-bold mb-4">Question Summary</h2>
         <div className="space-y-4">
-          {quiz.questions.map((question: any, index: number) => (
-            <Card key={question.id} className="overflow-hidden">
-              <div
-                className={`h-1 ${userAnswers[question.id] === question.correctAnswer ? "bg-green-500" : "bg-red-500"}`}
-              />
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-medium">
-                      {index + 1}. {question.question}
-                    </div>
-                    <div className="mt-2 text-sm">
-                      <span className="font-medium">Your answer: </span>
-                      <span
-                        className={
-                          userAnswers[question.id] === question.correctAnswer
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-red-600 dark:text-red-400"
-                        }
-                      >
-                        {userAnswers[question.id] || "Not answered"}
-                      </span>
-                    </div>
-                    {userAnswers[question.id] !== question.correctAnswer && (
-                      <div className="mt-1 text-sm">
-                        <span className="font-medium">Correct answer: </span>
-                        <span className="text-green-600 dark:text-green-400">{question.correctAnswer}</span>
+          {quiz.questions.map((question: Question, index: number) => {
+            const userSelectedAnswer = getUserSelectedAnswer(question)
+            const correctAnswer = getCorrectAnswer(question)
+            const isCorrect = userSelectedAnswer && correctAnswer && userSelectedAnswer.id === correctAnswer.id
+            
+            return (
+              <Card key={question.id} className="overflow-hidden">
+                <div
+                  className={`h-1 ${isCorrect ? "bg-green-500" : "bg-red-500"}`}
+                />
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-medium">
+                        {index + 1}. {question.question}
                       </div>
-                    )}
+                      <div className="mt-2 text-sm">
+                        <span className="font-medium">Your answer: </span>
+                        <span
+                          className={
+                            isCorrect
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
+                          }
+                        >
+                          {userSelectedAnswer?.answer_text || "Not answered"}
+                        </span>
+                      </div>
+                      {!isCorrect && correctAnswer && (
+                        <div className="mt-1 text-sm">
+                          <span className="font-medium">Correct answer: </span>
+                          <span className="text-green-600 dark:text-green-400">
+                            {correctAnswer.answer_text}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className={`flex items-center justify-center w-8 h-8 rounded-full ${
+                        isCorrect
+                          ? "bg-green-100 dark:bg-green-900/20"
+                          : "bg-red-100 dark:bg-red-900/20"
+                      }`}
+                    >
+                      {isCorrect ? (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-500" />
+                      )}
+                    </div>
                   </div>
-                  <div
-                    className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                      userAnswers[question.id] === question.correctAnswer
-                        ? "bg-green-100 dark:bg-green-900/20"
-                        : "bg-red-100 dark:bg-red-900/20"
-                    }`}
-                  >
-                    {userAnswers[question.id] === question.correctAnswer ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </motion.div>
     </div>

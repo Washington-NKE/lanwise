@@ -49,7 +49,7 @@ export function Navbar() {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.5 }}
               >
-                <span className="text-2xl font-bold gradient-text">QuizMaster</span>
+                <span className="text-2xl font-bold gradient-text">LanWise</span>
               </motion.div>
             </Link>
           </div>

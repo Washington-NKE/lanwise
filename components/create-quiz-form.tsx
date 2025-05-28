@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
-import { PlusCircle, Trash2, ArrowLeft, ArrowRight, Save, ImageIcon, Clock } from "lucide-react"
+import { PlusCircle, Trash2, ArrowLeft, ArrowRight, Save, ImageIcon, Clock, HelpCircle } from "lucide-react"
 
 type Question = {
   id: number
@@ -22,6 +22,7 @@ type Question = {
   points: number
   timeLimit: number
   imageUrl?: string
+  explanation?: string
 }
 
 export function CreateQuizForm() {
@@ -45,6 +46,7 @@ export function CreateQuizForm() {
       ],
       points: 10,
       timeLimit: 30,
+      explanation: "",
     },
   ])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -65,6 +67,7 @@ export function CreateQuizForm() {
       ],
       points: 10,
       timeLimit: 30,
+      explanation: "",
     }
     setQuestions([...questions, newQuestion])
     setCurrentQuestionIndex(questions.length)
@@ -114,30 +117,44 @@ export function CreateQuizForm() {
   }
 
   const handleSubmit = async () => {
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     try {
-      // Here you would typically send the quiz data to your API
-      console.log({
-        title,
-        description,
-        category,
-        difficulty,
-        timeLimit,
-        isPublic,
-        questions,
-      })
+      const response = await fetch('/api/user/quizzes/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          difficulty,
+          timeLimit,
+          isPublic,
+          questions,
+        }),
+      });
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create quiz');
+      }
+
+      // Show success message (you might want to use a toast notification)
+      console.log('Quiz created successfully:', data.quiz);
+      
       // Redirect to the quizzes page
-      router.push("/my-quizzes")
+      router.push("/my-quizzes");
     } catch (error) {
-      console.error("Error creating quiz:", error)
+      console.error("Error creating quiz:", error);
+      
+      // Show error message to user (you might want to use a toast notification)
+      alert(error instanceof Error ? error.message : 'Failed to create quiz. Please try again.');
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const isDetailsValid = title && description && category && difficulty
   const isQuestionsValid = questions.every(
@@ -378,6 +395,24 @@ export function CreateQuizForm() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="explanation" className="flex items-center">
+                    <HelpCircle className="h-4 w-4 mr-1" />
+                    Answer Explanation (Optional)
+                  </Label>
+                  <Textarea
+                    id="explanation"
+                    placeholder="Provide a brief explanation for the correct answer..."
+                    value={currentQuestion.explanation || ""}
+                    onChange={(e) => handleQuestionChange("explanation", e.target.value)}
+                    rows={3}
+                    className="text-sm"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    This explanation will be shown to users after they answer the question.
+                  </p>
                 </div>
 
                 <div className="flex justify-end">

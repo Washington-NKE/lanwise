@@ -12,80 +12,129 @@ import { Clock, CheckCircle, XCircle } from "lucide-react"
 import confetti from "canvas-confetti"
 import { QuizResults } from "@/components/quiz-results"
 
-// Mock quiz data - would be replaced with actual API call
-const mockQuiz = {
-  id: "1",
-  title: "World Geography",
-  description: "Test your knowledge of countries, capitals, and landmarks",
-  difficulty: "Medium",
-  timeLimit: 15,
-  totalQuestions: 10,
-  questions: [
-    {
-      id: 1,
-      question: "What is the capital of France?",
-      options: ["London", "Berlin", "Paris", "Madrid"],
-      correctAnswer: "Paris",
-      points: 10,
-    },
-    {
-      id: 2,
-      question: "Which is the largest ocean on Earth?",
-      options: ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"],
-      correctAnswer: "Pacific Ocean",
-      points: 10,
-    },
-    {
-      id: 3,
-      question: "Which country is known as the Land of the Rising Sun?",
-      options: ["China", "Japan", "Thailand", "South Korea"],
-      correctAnswer: "Japan",
-      points: 10,
-    },
-    {
-      id: 4,
-      question: "The Great Barrier Reef is located in which country?",
-      options: ["Brazil", "Australia", "Indonesia", "Mexico"],
-      correctAnswer: "Australia",
-      points: 10,
-    },
-    {
-      id: 5,
-      question: "Which desert is the largest in the world?",
-      options: ["Gobi Desert", "Kalahari Desert", "Sahara Desert", "Antarctic Desert"],
-      correctAnswer: "Antarctic Desert",
-      points: 10,
-    },
-  ],
+// Define types to match the new API response structure
+type Answer = {
+  id: number
+  question_id: number
+  answer_text: string
+  is_correct: boolean
+}
+
+type Question = {
+  id: number
+  quiz_id: number
+  question: string
+  image_url: string | null
+  points: number
+  time_limit: number
+  order_num: number
+  answers?: Answer[]
+}
+
+type Quiz = {
+  id: number
+  title: string
+  description: string
+  image_url: string
+  difficulty: string
+  time_limit: number
+  created_by: number
+  created_at: string
+  creator_name: string
+  questions: Question[]
 }
 
 export function QuizGame({ quizId }: { quizId: string }) {
   const { data: session } = useSession()
   const router = useRouter()
-  const [quiz, setQuiz] = useState(mockQuiz)
+  const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
+  const [selectedAnswer, setSelectedAnswer] = useState<Answer | null>(null)
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false)
   const [score, setScore] = useState(0)
-  const [timeLeft, setTimeLeft] = useState(quiz.timeLimit * 60)
+  const [timeLeft, setTimeLeft] = useState(0)
   const [quizCompleted, setQuizCompleted] = useState(false)
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({})
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [loadingQuestions, setLoadingQuestions] = useState<Record<number, boolean>>({})
 
-  const currentQuestion = quiz.questions[currentQuestionIndex]
-  const progress = ((currentQuestionIndex + 1) / quiz.questions.length) * 100
-
+  // Fetch quiz data from the database
   useEffect(() => {
-    // Simulate API call to fetch quiz data
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
+    async function fetchQuiz() {
+      try {
+        setIsLoading(true)
+        // Get the quiz details with questions using the combined endpoint
+        const quizResponse = await fetch(`/api/quizzes/${quizId}`)
+        
+        if (!quizResponse.ok) {
+          throw new Error(`Failed to fetch quiz: ${quizResponse.status}`)
+        }
+        
+        const quizData = await quizResponse.json()
+        setQuiz(quizData)
+        setTimeLeft(quizData.time_limit * 60)
+        
+        // Create initial loading state for all questions
+        const loadingState = quizData.questions.reduce((acc: Record<number, boolean>, question: Question) => {
+          acc[question.id] = false;
+          return acc;
+        }, {});
+        setLoadingQuestions(loadingState);
+        
+        // Fetch answers for the first question immediately
+        if (quizData.questions.length > 0) {
+          fetchQuestionAnswers(quizData.questions[0].id);
+        }
+      } catch (err) {
+        console.error("Error fetching quiz:", err)
+        setError(err instanceof Error ? err.message : "Failed to load quiz")
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-    return () => clearTimeout(timer)
+    fetchQuiz()
   }, [quizId])
 
+  // Fetch answers for a specific question
+  const fetchQuestionAnswers = async (questionId: number) => {
+    if (!quiz) return;
+    
+    try {
+      setLoadingQuestions(prev => ({ ...prev, [questionId]: true }));
+      
+      const answersResponse = await fetch(`/api/quizzes/${quizId}/questions/${questionId}/route`)
+      
+      if (!answersResponse.ok) {
+        throw new Error(`Failed to fetch answers: ${answersResponse.status}`)
+      }
+      
+      const answersData = await answersResponse.json()
+      
+      // Update the quiz object with the answers for this question
+      setQuiz(prevQuiz => {
+        if (!prevQuiz) return null;
+        
+        const updatedQuestions = prevQuiz.questions.map(q => {
+          if (q.id === questionId) {
+            return { ...q, answers: answersData }
+          }
+          return q;
+        });
+        
+        return { ...prevQuiz, questions: updatedQuestions };
+      });
+    } catch (err) {
+      console.error(`Error fetching answers for question ${questionId}:`, err);
+    } finally {
+      setLoadingQuestions(prev => ({ ...prev, [questionId]: false }));
+    }
+  }
+
+  // Set up timer
   useEffect(() => {
-    if (isLoading || quizCompleted) return
+    if (isLoading || quizCompleted || !quiz) return
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -99,7 +148,17 @@ export function QuizGame({ quizId }: { quizId: string }) {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isLoading, quizCompleted])
+  }, [isLoading, quizCompleted, quiz])
+
+  // Prefetch next question's answers
+  useEffect(() => {
+    if (!quiz || currentQuestionIndex >= quiz.questions.length - 1) return;
+    
+    const nextQuestionId = quiz.questions[currentQuestionIndex + 1].id;
+    if (!quiz.questions[currentQuestionIndex + 1].answers) {
+      fetchQuestionAnswers(nextQuestionId);
+    }
+  }, [currentQuestionIndex, quiz]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -107,16 +166,17 @@ export function QuizGame({ quizId }: { quizId: string }) {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`
   }
 
-  const handleAnswerSelect = (answer: string) => {
+  const handleAnswerSelect = (answer: Answer) => {
     if (isAnswerSubmitted) return
     setSelectedAnswer(answer)
   }
 
   const handleAnswerSubmit = () => {
-    if (!selectedAnswer || isAnswerSubmitted) return
+    if (!selectedAnswer || isAnswerSubmitted || !quiz) return
 
     setIsAnswerSubmitted(true)
-    const isCorrect = selectedAnswer === currentQuestion.correctAnswer
+    const currentQuestion = quiz.questions[currentQuestionIndex]
+    const isCorrect = selectedAnswer.is_correct
 
     if (isCorrect) {
       setScore((prev) => prev + currentQuestion.points)
@@ -130,11 +190,13 @@ export function QuizGame({ quizId }: { quizId: string }) {
 
     setUserAnswers((prev) => ({
       ...prev,
-      [currentQuestion.id]: selectedAnswer,
+      [currentQuestion.id]: selectedAnswer.id.toString(), // This stores answer ID
     }))
   }
 
   const handleNextQuestion = () => {
+    if (!quiz) return
+    
     if (currentQuestionIndex < quiz.questions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1)
       setSelectedAnswer(null)
@@ -144,20 +206,88 @@ export function QuizGame({ quizId }: { quizId: string }) {
     }
   }
 
-  const handleQuizEnd = () => {
+  const handleQuizEnd = async () => {
     setQuizCompleted(true)
-    // Here you would typically save the results to the database
+    
+    if (!quiz || !session?.user) return
+    
+    // Save the quiz results to the database
+    try {
+      const response = await fetch('/api/quiz-results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quiz_id: quiz.id,
+          user_id: session.user.email,
+          score: score,
+          time_taken: quiz.time_limit * 60 - timeLeft,
+          answers: userAnswers
+        }),
+      })
+      
+      if (!response.ok) {
+        console.error('Failed to save quiz results')
+      }
+    } catch (err) {
+      console.error('Error saving quiz results:', err)
+    }
   }
 
   if (isLoading) {
-    return <div>Loading quiz...</div>
+    return (
+      <div className="flex justify-center items-center min-h-[300px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="border border-red-300 bg-red-50 p-4 rounded-md text-red-700">
+        <h3 className="font-semibold mb-2">Error loading quiz</h3>
+        <p>{error}</p>
+        <Button 
+          variant="outline" 
+          className="mt-4"
+          onClick={() => router.push('/quizzes')}
+        >
+          Return to Quizzes
+        </Button>
+      </div>
+    )
+  }
+
+  if (!quiz) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-xl font-semibold mb-2">Quiz not found</h3>
+        <Button 
+          variant="outline" 
+          className="mt-4"
+          onClick={() => router.push('/quizzes')}
+        >
+          Return to Quizzes
+        </Button>
+      </div>
+    )
   }
 
   if (quizCompleted) {
     return (
-      <QuizResults quiz={quiz} score={score} userAnswers={userAnswers} timeTaken={quiz.timeLimit * 60 - timeLeft} />
+      <QuizResults 
+        quiz={quiz} 
+        score={score} 
+        userAnswers={userAnswers} 
+        timeTaken={quiz.time_limit * 60 - timeLeft} 
+      />
     )
   }
+
+  const currentQuestion = quiz.questions[currentQuestionIndex]
+  const progress = ((currentQuestionIndex + 1) / quiz.questions.length) * 100
+  const isLoadingAnswers = loadingQuestions[currentQuestion.id] || !currentQuestion.answers
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -203,57 +333,68 @@ export function QuizGame({ quizId }: { quizId: string }) {
         <Card className="border-2">
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold mb-6">{currentQuestion.question}</h2>
-            <div className="space-y-4">
-              {currentQuestion.options.map((option, index) => (
-                <motion.div
-                  key={index}
-                  whileHover={{ scale: isAnswerSubmitted ? 1 : 1.02 }}
-                  whileTap={{ scale: isAnswerSubmitted ? 1 : 0.98 }}
-                  onClick={() => handleAnswerSelect(option)}
-                  className={`
-                    p-4 rounded-lg border-2 cursor-pointer transition-all
-                    ${
-                      selectedAnswer === option
-                        ? isAnswerSubmitted
-                          ? option === currentQuestion.correctAnswer
-                            ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-                            : "border-red-500 bg-red-50 dark:bg-red-900/20"
-                          : "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                        : "border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
-                    }
-                    ${isAnswerSubmitted && option === currentQuestion.correctAnswer ? "border-green-500 bg-green-50 dark:bg-green-900/20" : ""}
-                  `}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full border-2 border-gray-300 dark:border-gray-600 text-sm font-medium">
-                        {String.fromCharCode(65 + index)}
+            
+            {isLoadingAnswers ? (
+              <div className="flex justify-center items-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {currentQuestion.answers?.map((answer, index) => (
+                  <motion.div
+                    key={answer.id}
+                    whileHover={{ scale: isAnswerSubmitted ? 1 : 1.02 }}
+                    whileTap={{ scale: isAnswerSubmitted ? 1 : 0.98 }}
+                    onClick={() => handleAnswerSelect(answer)}
+                    className={`
+                      p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${
+                        selectedAnswer?.id === answer.id
+                          ? isAnswerSubmitted
+                            ? answer.is_correct
+                              ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                              : "border-red-500 bg-red-50 dark:bg-red-900/20"
+                            : "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                          : "border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
+                      }
+                      ${isAnswerSubmitted && answer.is_correct ? "border-green-500 bg-green-50 dark:bg-green-900/20" : ""}
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full border-2 border-gray-300 dark:border-gray-600 text-sm font-medium">
+                          {String.fromCharCode(65 + index)}
+                        </div>
+                        <span>{answer.answer_text}</span>
                       </div>
-                      <span>{option}</span>
+                      {isAnswerSubmitted && selectedAnswer?.id === answer.id && (
+                        <div>
+                          {answer.is_correct ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-500" />
+                          )}
+                        </div>
+                      )}
+                      {isAnswerSubmitted && answer.is_correct && selectedAnswer?.id !== answer.id && (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      )}
                     </div>
-                    {isAnswerSubmitted && option === selectedAnswer && (
-                      <div>
-                        {option === currentQuestion.correctAnswer ? (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-500" />
-                        )}
-                      </div>
-                    )}
-                    {isAnswerSubmitted && option === currentQuestion.correctAnswer && option !== selectedAnswer && (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
 
       <div className="flex justify-between">
         {!isAnswerSubmitted ? (
-          <Button onClick={handleAnswerSubmit} disabled={!selectedAnswer} className="w-full py-6 text-lg">
+          <Button 
+            onClick={handleAnswerSubmit} 
+            disabled={!selectedAnswer || isLoadingAnswers} 
+            className="w-full py-6 text-lg"
+          >
             Submit Answer
           </Button>
         ) : (

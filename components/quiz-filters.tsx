@@ -1,47 +1,61 @@
-"use client"
-
-import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
-import { Button } from "@/components/ui/button"
 import { Search, Filter, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
+// Dynamic categories and difficulties based on actual data
 const categories = [
   { id: "science", label: "Science" },
   { id: "history", label: "History" },
+  { id: "math", label: "Mathematics" },
+  { id: "literature", label: "Literature" },
   { id: "geography", label: "Geography" },
-  { id: "entertainment", label: "Entertainment" },
   { id: "sports", label: "Sports" },
   { id: "technology", label: "Technology" },
-  { id: "art", label: "Art & Literature" },
-  { id: "music", label: "Music" },
+  { id: "art", label: "Art & Culture" },
+  { id: "general", label: "General Knowledge" }
 ]
 
-const difficulties = [
-  { id: "easy", label: "Easy" },
-  { id: "medium", label: "Medium" },
-  { id: "hard", label: "Hard" },
-]
+interface QuizFiltersProps {
+  searchTerm: string
+  setSearchTerm: (term: string) => void
+  selectedCategories: string[]
+  setSelectedCategories: (categories: string[]) => void
+  selectedDifficulties: string[]
+  setSelectedDifficulties: (difficulties: string[]) => void
+  timeRange: [number, number]
+  setTimeRange: (range: [number, number]) => void
+  difficulties: string[]
+}
 
-export function QuizFilters() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([])
-  const [timeRange, setTimeRange] = useState([5, 30])
-
+export default function QuizFilters({ 
+  searchTerm, 
+  setSearchTerm, 
+  selectedCategories, 
+  setSelectedCategories,
+  selectedDifficulties, 
+  setSelectedDifficulties,
+  timeRange, 
+  setTimeRange,
+  difficulties 
+}: QuizFiltersProps) {
   const handleCategoryChange = (categoryId: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId],
+    setSelectedCategories(
+      selectedCategories.includes(categoryId) 
+        ? selectedCategories.filter((id) => id !== categoryId) 
+        : [...selectedCategories, categoryId]
     )
   }
 
   const handleDifficultyChange = (difficultyId: string) => {
-    setSelectedDifficulties((prev) =>
-      prev.includes(difficultyId) ? prev.filter((id) => id !== difficultyId) : [...prev, difficultyId],
+    setSelectedDifficulties(
+      selectedDifficulties.includes(difficultyId) 
+        ? selectedDifficulties.filter((id) => id !== difficultyId) 
+        : [...selectedDifficulties, difficultyId]
     )
   }
 
@@ -49,18 +63,18 @@ export function QuizFilters() {
     setSearchTerm("")
     setSelectedCategories([])
     setSelectedDifficulties([])
-    setTimeRange([5, 30])
+    setTimeRange([1, 120])
   }
 
   const hasActiveFilters =
     searchTerm !== "" ||
     selectedCategories.length > 0 ||
     selectedDifficulties.length > 0 ||
-    timeRange[0] !== 5 ||
-    timeRange[1] !== 30
+    timeRange[0] !== 1 ||
+    timeRange[1] !== 120
 
   return (
-    <Card className="sticky top-20">
+    <Card className="sticky top-6">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl">Filters</CardTitle>
@@ -112,14 +126,14 @@ export function QuizFilters() {
             <AccordionContent>
               <div className="space-y-2">
                 {difficulties.map((difficulty) => (
-                  <div key={difficulty.id} className="flex items-center space-x-2">
+                  <div key={difficulty} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`difficulty-${difficulty.id}`}
-                      checked={selectedDifficulties.includes(difficulty.id)}
-                      onCheckedChange={() => handleDifficultyChange(difficulty.id)}
+                      id={`difficulty-${difficulty}`}
+                      checked={selectedDifficulties.includes(difficulty)}
+                      onCheckedChange={() => handleDifficultyChange(difficulty)}
                     />
-                    <Label htmlFor={`difficulty-${difficulty.id}`} className="text-sm font-normal cursor-pointer">
-                      {difficulty.label}
+                    <Label htmlFor={`difficulty-${difficulty}`} className="text-sm font-normal cursor-pointer">
+                      {difficulty}
                     </Label>
                   </div>
                 ))}
@@ -131,7 +145,14 @@ export function QuizFilters() {
             <AccordionTrigger>Time Limit</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-4">
-                <Slider value={timeRange} min={1} max={60} step={1} onValueChange={setTimeRange} />
+                <Slider 
+                  value={timeRange} 
+                  min={1} 
+                  max={120} 
+                  step={1} 
+                  onValueChange={setTimeRange}
+                  className="w-full"
+                />
                 <div className="flex items-center justify-between text-sm">
                   <span>{timeRange[0]} min</span>
                   <span>{timeRange[1]} min</span>

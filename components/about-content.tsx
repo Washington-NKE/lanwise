@@ -6,33 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Brain, Trophy, Users, Zap, Globe, Heart } from "lucide-react"
 import Link from "next/link"
-
-const teamMembers = [
-  {
-    name: "Alex Johnson",
-    role: "Founder & CEO",
-    bio: "Quiz enthusiast with a passion for education and technology.",
-    avatar: "/placeholder.svg?height=100&width=100",
-  },
-  {
-    name: "Sarah Williams",
-    role: "Content Director",
-    bio: "Former teacher with expertise in curriculum development.",
-    avatar: "/placeholder.svg?height=100&width=100",
-  },
-  {
-    name: "Michael Chen",
-    role: "Lead Developer",
-    bio: "Full-stack developer with a love for creating interactive experiences.",
-    avatar: "/placeholder.svg?height=100&width=100",
-  },
-  {
-    name: "Emily Davis",
-    role: "UX Designer",
-    bio: "Designer focused on creating intuitive and engaging user interfaces.",
-    avatar: "/placeholder.svg?height=100&width=100",
-  },
-]
+import { teamMembers } from "@/lib/constants"
 
 export function AboutContent() {
   return (
@@ -80,7 +54,7 @@ export function AboutContent() {
               <h2 className="text-3xl font-bold mb-6">Our Story</h2>
               <div className="space-y-4 text-gray-600 dark:text-gray-300">
                 <p>
-                  QuizMaster was founded in 2023 with a simple idea: learning should be fun, engaging, and accessible to
+                  QuizMaster was founded in 2025 with a simple idea: learning should be fun, engaging, and accessible to
                   everyone. What started as a small project has grown into a platform used by thousands of people around
                   the world.
                 </p>

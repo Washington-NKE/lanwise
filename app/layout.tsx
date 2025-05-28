@@ -10,8 +10,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "QuizMaster - Interactive Quiz Platform",
-  description: "An advanced quiz application with vibrant UI and animations",
-    generator: 'v0.dev'
+  description: "An quiz application with vibrant UI and animations",
 }
 
 export default function RootLayout({

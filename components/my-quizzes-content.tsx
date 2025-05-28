@@ -12,93 +12,138 @@ import { Progress } from "@/components/ui/progress"
 import { PlusCircle, Edit, Trash2, Clock, Award, BarChart2 } from "lucide-react"
 import Link from "next/link"
 
-// Mock data - would be replaced with actual API calls
-const createdQuizzes = [
-  {
-    id: 1,
-    title: "Science Trivia",
-    description: "Test your knowledge of physics, chemistry, and biology",
-    questions: 10,
-    participants: 156,
-    createdAt: "2023-05-10T14:20:00Z",
-  },
-  {
-    id: 2,
-    title: "Movie Quotes",
-    description: "Can you identify these famous movie quotes?",
-    questions: 15,
-    participants: 89,
-    createdAt: "2023-04-22T09:15:00Z",
-  },
-]
+interface Quiz {
+  id: number
+  title: string
+  description: string
+  category?: string
+  difficulty?: string
+  created_at: string
+  creator_name?: string
+}
 
-const inProgressQuizzes = [
-  {
-    id: 3,
-    title: "World Geography",
-    description: "Test your knowledge of countries, capitals, and landmarks",
-    progress: 30,
-    lastPlayed: "2023-05-15T10:30:00Z",
-  },
-  {
-    id: 4,
-    title: "History Buff",
-    description: "Journey through time with historical events and figures",
-    progress: 60,
-    lastPlayed: "2023-05-12T16:45:00Z",
-  },
-]
+interface CreatedQuiz extends Quiz {
+  questions?: number
+  participants?: number
+}
 
-const completedQuizzes = [
-  {
-    id: 5,
-    title: "Pop Culture",
-    description: "How well do you know movies, music, and celebrities?",
-    score: 80,
-    completedAt: "2023-05-08T11:20:00Z",
-  },
-  {
-    id: 6,
-    title: "Tech Wizards",
-    description: "Test your knowledge of computers, gadgets, and innovation",
-    score: 65,
-    completedAt: "2023-05-01T15:10:00Z",
-  },
-]
+interface InProgressQuiz extends Quiz {
+  progress: number
+  last_played: string
+}
+
+interface CompletedQuiz extends Quiz {
+  score: number
+  completed_at: string
+  correct_answers?: number
+  total_questions?: number
+}
 
 export function MyQuizzesContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [createdQuizzes, setCreatedQuizzes] = useState<CreatedQuiz[]>([])
+  const [inProgressQuizzes, setInProgressQuizzes] = useState<InProgressQuiz[]>([])
+  const [completedQuizzes, setCompletedQuizzes] = useState<CompletedQuiz[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
     }
 
-    // Simulate API call
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
+    if (status === "authenticated" && session?.user?.id) {
+      fetchUserQuizzes()
+    }
+  }, [status, router, session])
 
-    return () => clearTimeout(timer)
-  }, [status, router])
+  const fetchUserQuizzes = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Fetch all user's quiz data
+      const [createdRes, progressRes, historyRes] = await Promise.all([
+        fetch(`/api/user/quizzes/created?userId=${session?.user?.id}`),
+        fetch(`/api/user/quizzes/progress?userId=${session?.user?.id}`),
+        fetch(`/api/user/quizzes/history?userId=${session?.user?.id}`)
+      ])
+
+      if (!createdRes.ok || !progressRes.ok || !historyRes.ok) {
+        throw new Error('Failed to fetch quiz data')
+      }
+
+      const [created, progress, history] = await Promise.all([
+        createdRes.json(),
+        progressRes.json(),
+        historyRes.json()
+      ])
+
+      setCreatedQuizzes(created)
+      setInProgressQuizzes(progress)
+      setCompletedQuizzes(history)
+    } catch (error) {
+      console.error('Error fetching quizzes:', error)
+      setError('Failed to load quizzes. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteQuiz = async (quizId: number) => {
+    if (!confirm('Are you sure you want to delete this quiz?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/user/quizzes/${quizId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete quiz')
+      }
+
+      // Refresh the data
+      fetchUserQuizzes()
+    } catch (error) {
+      console.error('Error deleting quiz:', error)
+      alert('Failed to delete quiz. Please try again.')
+    }
+  }
 
   if (status === "loading" || isLoading) {
-    return <div>Loading quizzes...</div>
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Loading quizzes...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!session) {
     return null
   }
 
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">{error}</p>
+        <Button onClick={fetchUserQuizzes}>Try Again</Button>
+      </div>
+    )
+  }
+
   return (
     <div>
       <Tabs defaultValue="created" className="space-y-8">
         <TabsList>
-          <TabsTrigger value="created">Created</TabsTrigger>
-          <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="created">Created ({createdQuizzes.length})</TabsTrigger>
+          <TabsTrigger value="in-progress">In Progress ({inProgressQuizzes.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({completedQuizzes.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="created">
@@ -131,22 +176,46 @@ export function MyQuizzesContent() {
               >
                 <Card className="h-full">
                   <CardHeader>
-                    <CardTitle>{quiz.title}</CardTitle>
-                    <CardDescription>{quiz.description}</CardDescription>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
+                        <CardDescription className="line-clamp-2">{quiz.description}</CardDescription>
+                      </div>
+                      {quiz.category && (
+                        <Badge variant="secondary" className="ml-2 shrink-0">
+                          {quiz.category}
+                        </Badge>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500 dark:text-gray-400">Questions</span>
-                        <span>{quiz.questions}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500 dark:text-gray-400">Participants</span>
-                        <span>{quiz.participants}</span>
-                      </div>
+                      {quiz.questions && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500 dark:text-gray-400">Questions</span>
+                          <span>{quiz.questions}</span>
+                        </div>
+                      )}
+                      {quiz.participants && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500 dark:text-gray-400">Participants</span>
+                          <span>{quiz.participants}</span>
+                        </div>
+                      )}
+                      {quiz.difficulty && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500 dark:text-gray-400">Difficulty</span>
+                          <Badge 
+                            variant={quiz.difficulty === 'easy' ? 'default' : quiz.difficulty === 'medium' ? 'secondary' : 'destructive'}
+                            className="text-xs"
+                          >
+                            {quiz.difficulty}
+                          </Badge>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500 dark:text-gray-400">Created</span>
-                        <span>{new Date(quiz.createdAt).toLocaleDateString()}</span>
+                        <span>{new Date(quiz.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -157,7 +226,11 @@ export function MyQuizzesContent() {
                         Edit
                       </Link>
                     </Button>
-                    <Button variant="destructive" size="sm">
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => handleDeleteQuiz(quiz.id)}
+                    >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
                     </Button>
@@ -169,7 +242,10 @@ export function MyQuizzesContent() {
 
           {createdQuizzes.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400">You haven&apos;t created any quizzes yet.</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">You haven&apos;t created any quizzes yet.</p>
+              <Button asChild>
+                <Link href="/create-quiz">Create Your First Quiz</Link>
+              </Button>
             </div>
           )}
         </TabsContent>
@@ -185,21 +261,41 @@ export function MyQuizzesContent() {
               >
                 <Card className="h-full">
                   <CardHeader>
-                    <CardTitle>{quiz.title}</CardTitle>
-                    <CardDescription>{quiz.description}</CardDescription>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
+                        <CardDescription className="line-clamp-2">{quiz.description}</CardDescription>
+                      </div>
+                      {quiz.category && (
+                        <Badge variant="secondary" className="ml-2 shrink-0">
+                          {quiz.category}
+                        </Badge>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm text-gray-500 dark:text-gray-400">Progress</span>
-                          <span className="text-sm font-medium">{quiz.progress}%</span>
+                          <span className="text-sm font-medium">{Math.round(quiz.progress)}%</span>
                         </div>
                         <Progress value={quiz.progress} className="h-2" />
                       </div>
+                      {quiz.difficulty && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500 dark:text-gray-400">Difficulty</span>
+                          <Badge 
+                            variant={quiz.difficulty === 'easy' ? 'default' : quiz.difficulty === 'medium' ? 'secondary' : 'destructive'}
+                            className="text-xs"
+                          >
+                            {quiz.difficulty}
+                          </Badge>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500 dark:text-gray-400">Last played</span>
-                        <span>{new Date(quiz.lastPlayed).toLocaleDateString()}</span>
+                        <span>{new Date(quiz.last_played).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -215,8 +311,8 @@ export function MyQuizzesContent() {
 
           {inProgressQuizzes.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400">You don&apos;t have any quizzes in progress.</p>
-              <Button className="mt-4" asChild>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">You don&apos;t have any quizzes in progress.</p>
+              <Button asChild>
                 <Link href="/quizzes">Browse Quizzes</Link>
               </Button>
             </div>
@@ -235,16 +331,23 @@ export function MyQuizzesContent() {
                 <Card className="h-full">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>{quiz.title}</CardTitle>
+                      <div>
+                        <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
+                        <CardDescription className="line-clamp-2">{quiz.description}</CardDescription>
+                      </div>
                       <Badge
-                        className={`${
+                        className={`ml-2 shrink-0 ${
                           quiz.score >= 80 ? "bg-green-500" : quiz.score >= 60 ? "bg-yellow-500" : "bg-red-500"
                         }`}
                       >
                         {quiz.score}%
                       </Badge>
                     </div>
-                    <CardDescription>{quiz.description}</CardDescription>
+                    {quiz.category && (
+                      <Badge variant="outline" className="w-fit mt-2">
+                        {quiz.category}
+                      </Badge>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -260,19 +363,23 @@ export function MyQuizzesContent() {
                           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 mb-2">
                             <Clock className="h-5 w-5 text-blue-500" />
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">Time</div>
-                          <div className="font-medium">5:30</div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">Questions</div>
+                          <div className="font-medium">
+                            {quiz.correct_answers || 0}/{quiz.total_questions || 0}
+                          </div>
                         </div>
                         <div className="flex flex-col items-center">
                           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/20 mb-2">
                             <BarChart2 className="h-5 w-5 text-green-500" />
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">Rank</div>
-                          <div className="font-medium">#42</div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">Difficulty</div>
+                          <div className="font-medium text-xs">
+                            {quiz.difficulty || 'N/A'}
+                          </div>
                         </div>
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                        Completed on {new Date(quiz.completedAt).toLocaleDateString()}
+                        Completed on {new Date(quiz.completed_at).toLocaleDateString()}
                       </div>
                     </div>
                   </CardContent>
@@ -291,8 +398,8 @@ export function MyQuizzesContent() {
 
           {completedQuizzes.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400">You haven&apos;t completed any quizzes yet.</p>
-              <Button className="mt-4" asChild>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">You haven&apos;t completed any quizzes yet.</p>
+              <Button asChild>
                 <Link href="/quizzes">Browse Quizzes</Link>
               </Button>
             </div>

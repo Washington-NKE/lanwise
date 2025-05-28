@@ -188,3 +188,119 @@ export async function getLeaderboard() {
     throw error
   }
 }
+
+
+export async function updateUser(id: number, updates: Partial<{
+  name: string
+  email: string
+  image: string
+  password: string
+}>) {
+  try {
+    const setClause = Object.entries(updates)
+      .map(([key, value]) => `${key} = ${value}`)
+      .join(', ')
+    
+    const [user] = await sql`
+      UPDATE users 
+      SET ${sql.unsafe(setClause)}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `
+    return user
+  } catch (error) {
+    console.error("Error updating user:", error)
+    throw error
+  }
+}
+
+export async function createUserWithOAuth(
+  name: string,
+  email: string,
+  image?: string,
+  provider?: string,
+  providerId?: string
+) {
+  try {
+    const [user] = await sql`
+      INSERT INTO users (name, email, image, oauth_provider, oauth_provider_id)
+      VALUES (${name}, ${email}, ${image}, ${provider}, ${providerId})
+      RETURNING *
+    `
+    return user
+  } catch (error) {
+    console.error("Error creating OAuth user:", error)
+    throw error
+  }
+}
+
+// For getting recent quizzes (mentioned in your error)
+export async function getUserRecentQuizzes(userId: string, limit: number = 10) {
+  try {
+    const quizzes = await sql`
+      SELECT 
+        q.id,
+        q.title,
+        q.description,
+        q.category,
+        q.difficulty,
+        uqp.score,
+        uqp.completed,
+        uqp.completed_at
+      FROM quizzes q
+      JOIN user_quiz_progress uqp ON q.id = uqp.quiz_id
+      WHERE uqp.user_id = ${userId}
+      ORDER BY uqp.completed_at DESC
+      LIMIT ${limit}
+    `
+    return quizzes
+  } catch (error) {
+    console.error("Error getting user recent quizzes:", error)
+    throw error
+  }
+}
+
+// For getting user's quiz history
+export async function getUserQuizHistory(userId: string) {
+  try {
+    const quizzes = await sql`
+      SELECT 
+        uqp.id,
+        uqp.score,
+        uqp.completed_at as date,
+        q.id as quiz_id,
+        q.title,
+        q.description,
+        q.category,
+        q.difficulty,
+        -- Count total questions for this quiz
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as total_questions,
+        -- Calculate correct answers based on score and total questions
+        CASE 
+          WHEN (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) > 0 
+          THEN ROUND((uqp.score::float / 100) * (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id))
+          ELSE 0 
+        END as correct_answers
+      FROM user_quiz_progress uqp
+      JOIN quizzes q ON uqp.quiz_id = q.id
+      WHERE uqp.user_id = ${userId} 
+        AND uqp.completed = true
+      ORDER BY uqp.completed_at DESC
+    `
+
+    return quizzes.map(attempt => ({
+      id: attempt.quiz_id,
+      title: attempt.title,
+      score: attempt.score,
+      date: attempt.date,
+      correctAnswers: attempt.correct_answers,
+      totalQuestions: attempt.total_questions,
+      category: attempt.category,
+      difficulty: attempt.difficulty
+    }))
+  } catch (error) {
+    console.error("Error getting user quiz history:", error)
+    throw error
+  }
+}
+

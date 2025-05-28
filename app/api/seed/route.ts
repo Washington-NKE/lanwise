@@ -1,16 +1,21 @@
-import { NextResponse } from "next/server"
-import { sql } from "@/lib/db"
-import { hash } from "bcrypt"
+// File should be located at: app/api/seed/route.ts
+import { NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { hash } from "bcrypt";
 
+// Define which HTTP methods are allowed for this endpoint
+export const dynamic = 'force-dynamic'; // Prevents caching issues
+
+// Define allowed methods
 export async function POST() {
   try {
     // Create a demo user
-    const hashedPassword = await hash("password123", 10)
+    const hashedPassword = await hash("password123", 10);
     await sql`
       INSERT INTO users (name, email, password, image)
       VALUES ('Demo User', 'demo@example.com', ${hashedPassword}, '/placeholder.svg?height=40&width=40')
       ON CONFLICT (email) DO NOTHING
-    `
+    `;
 
     // Create some quizzes
     const quizzes = [
@@ -35,7 +40,7 @@ export async function POST() {
         time_limit: 10,
         image_url: "/placeholder.svg?height=200&width=400",
       },
-    ]
+    ];
 
     for (const quiz of quizzes) {
       const [createdQuiz] = await sql`
@@ -49,23 +54,28 @@ export async function POST() {
           (SELECT id FROM users WHERE email = 'demo@example.com')
         )
         RETURNING id
-      `
+      `;
 
       // Add questions for each quiz
       if (quiz.title === "World Geography") {
-        await addGeographyQuestions(createdQuiz.id)
+        await addGeographyQuestions(createdQuiz.id);
       } else if (quiz.title === "Science Trivia") {
-        await addScienceQuestions(createdQuiz.id)
+        await addScienceQuestions(createdQuiz.id);
       } else if (quiz.title === "Pop Culture") {
-        await addPopCultureQuestions(createdQuiz.id)
+        await addPopCultureQuestions(createdQuiz.id);
       }
     }
 
-    return NextResponse.json({ message: "Database seeded successfully" })
+    return NextResponse.json({ message: "Database seeded successfully" });
   } catch (error) {
-    console.error("Error seeding database:", error)
-    return NextResponse.json({ message: "Error seeding database" }, { status: 500 })
+    console.error("Error seeding database:", error);
+    return NextResponse.json({ message: "Error seeding database" }, { status: 500 });
   }
+}
+
+// For debugging - add a GET method as well
+export async function GET() {
+  return NextResponse.json({ message: "Seed endpoint active. Use POST to seed the database." });
 }
 
 async function addGeographyQuestions(quizId: number) {
@@ -120,9 +130,9 @@ async function addGeographyQuestions(quizId: number) {
       ],
       order_num: 5,
     },
-  ]
+  ];
 
-  await addQuestionsAndAnswers(quizId, questions)
+  await addQuestionsAndAnswers(quizId, questions);
 }
 
 async function addScienceQuestions(quizId: number) {
@@ -177,9 +187,9 @@ async function addScienceQuestions(quizId: number) {
       ],
       order_num: 5,
     },
-  ]
+  ];
 
-  await addQuestionsAndAnswers(quizId, questions)
+  await addQuestionsAndAnswers(quizId, questions);
 }
 
 async function addPopCultureQuestions(quizId: number) {
@@ -234,9 +244,9 @@ async function addPopCultureQuestions(quizId: number) {
       ],
       order_num: 5,
     },
-  ]
+  ];
 
-  await addQuestionsAndAnswers(quizId, questions)
+  await addQuestionsAndAnswers(quizId, questions);
 }
 
 async function addQuestionsAndAnswers(quizId: number, questions: any[]) {
@@ -245,13 +255,13 @@ async function addQuestionsAndAnswers(quizId: number, questions: any[]) {
       INSERT INTO questions (quiz_id, question, order_num, points, time_limit)
       VALUES (${quizId}, ${q.question}, ${q.order_num}, 10, 30)
       RETURNING id
-    `
+    `;
 
     for (const option of q.options) {
       await sql`
         INSERT INTO answers (question_id, answer_text, is_correct)
         VALUES (${question.id}, ${option.text}, ${option.isCorrect})
-      `
+      `;
     }
   }
 }

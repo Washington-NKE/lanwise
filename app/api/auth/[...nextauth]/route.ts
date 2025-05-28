@@ -1,11 +1,11 @@
-import NextAuth from "next-auth"
+import NextAuth, { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import GithubProvider from "next-auth/providers/github"
 import { compare } from "bcrypt"
-import { getUserByEmail } from "@/lib/db"
+import { getUserByEmail, createUser } from "@/lib/db"
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -51,15 +51,46 @@ const handler = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id
+        token.email = user.email
+        token.name = user.name
+        token.image = user.image
       }
+
+      // Handle OAuth providers (Google/GitHub)
+      if (account?.provider === "google" || account?.provider === "github") {
+        try {
+          let dbUser = await getUserByEmail(token.email as string)
+          
+          if (!dbUser) {
+            // Create new user for OAuth
+            dbUser = await createUser(
+              token.name as string || "OAuth User",
+              token.email as string,
+              "", // No password for OAuth users
+              token.picture as string
+            )
+          }
+
+          token.id = dbUser.id.toString()
+          token.email = dbUser.email
+          token.name = dbUser.name
+          token.image = dbUser.image
+        } catch (error) {
+          console.error("Error handling OAuth:", error)
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string
+        session.user.email = token.email as string
+        session.user.name = token.name as string
+        session.user.image = token.image as string
       }
       return session
     },
@@ -73,6 +104,8 @@ const handler = NextAuth({
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
-})
+}
+
+const handler = NextAuth(authOptions)
 
 export { handler as GET, handler as POST }
