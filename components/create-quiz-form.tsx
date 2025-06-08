@@ -52,6 +52,7 @@ export function CreateQuizForm() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [isPublic, setIsPublic] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   const currentQuestion = questions[currentQuestionIndex]
 
@@ -115,6 +116,74 @@ export function CreateQuizForm() {
     }
     setQuestions(updatedQuestions)
   }
+  
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    alert('Please select a valid image file')
+    return
+  }
+ 
+  // Validate file size (e.g., max 5MB)
+  const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+  if (file.size > maxSize) {
+    alert('File size too large. Please select an image smaller than 5MB')
+    return
+  }
+
+  try {
+    setIsUploading(true)
+    console.log('Starting upload for file:', file.name, 'Size:', file.size)
+    
+    const formData = new FormData()
+    formData.append("file", file)
+
+    console.log('Sending request to /api/upload...')
+    
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    })
+
+    console.log('Response status:', response.status)
+    console.log('Response ok:', response.ok)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Upload failed with response:', errorText)
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+    console.log('Upload successful, received data:', data)
+    
+    if (data.url) {
+      handleQuestionChange("imageUrl", data.url)
+      console.log('Image URL set to:', data.url)
+    } else {
+      throw new Error('No URL returned from upload')
+    }
+    
+  } catch (error) {
+    console.error("Detailed error uploading image:", error)
+    
+    // More specific error messages
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      alert("Network error: Unable to connect to upload service. Please check your connection.")
+    } else if (error instanceof Error) {
+      alert(`Upload failed: ${error.message}`)
+    } else {
+      alert("Unknown error occurred during upload. Please try again.")
+    }
+  } finally {
+    setIsUploading(false)
+    // Clear the input so the same file can be selected again if needed
+    e.target.value = ''
+  }
+}
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -343,15 +412,31 @@ export function CreateQuizForm() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Image (Optional)</Label>
-                    <Button variant="ghost" size="sm" className="h-8 px-2">
-                      <ImageIcon className="h-4 w-4 mr-1" />
-                      Add Image
-                    </Button>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="image-upload"
+                        onChange={handleImageUpload}
+                        disabled={isUploading}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => document.getElementById("image-upload")?.click()}
+                        disabled={isUploading}
+                      >
+                        <ImageIcon className="h-4 w-4 mr-1" />
+                        {isUploading ? "Uploading..." : "Add Image"}
+                      </Button>
+                    </div>
                   </div>
                   {currentQuestion.imageUrl && (
                     <div className="relative w-full h-40 bg-gray-100 dark:bg-gray-800 rounded-md overflow-hidden">
                       <img
-                        src={currentQuestion.imageUrl || "/placeholder.svg"}
+                        src={currentQuestion.imageUrl}
                         alt="Question"
                         className="w-full h-full object-cover"
                       />

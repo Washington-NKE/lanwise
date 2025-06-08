@@ -1,5 +1,5 @@
 {
-  "name": "Quizwise",
+  "name": "Lanwise",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -48,6 +48,7 @@
     "bcryptjs": "latest",
     "canvas-confetti": "latest",
     "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.6.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
@@ -57,6 +58,7 @@
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
     "next-auth": "latest",
+    "next-cloudinary": "^6.16.0",
     "next-themes": "latest",
     "nodemailer": "latest",
     "react": "^19",

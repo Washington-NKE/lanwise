@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -333,6 +334,17 @@ export function QuizGame({ quizId }: { quizId: string }) {
         <Card className="border-2">
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold mb-6">{currentQuestion.question}</h2>
+            
+            {currentQuestion.image_url && (
+              <div className="mb-6 relative h-[300px] w-full">
+                <Image 
+                  src={currentQuestion.image_url} 
+                  alt="Question illustration" 
+                  fill
+                  className="rounded-lg object-contain"
+                />
+              </div>
+            )}
             
             {isLoadingAnswers ? (
               <div className="flex justify-center items-center h-40">

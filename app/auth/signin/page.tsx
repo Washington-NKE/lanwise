@@ -55,7 +55,7 @@ export default function SignIn() {
         return
       }
 
-      router.push("/dashboard")
+      router.push("/")
     } catch (error) {
       setError("An unexpected error occurred")
       setIsLoading(false)
@@ -133,7 +133,7 @@ export default function SignIn() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
+                  onClick={() => signIn("github", { callbackUrl: "/" })}
                 >
                   <Github className="mr-2 h-4 w-4" />
                   Continue with GitHub
@@ -141,7 +141,7 @@ export default function SignIn() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                  onClick={() => signIn("google", { callbackUrl: "/" })}
                 >
                   <Mail className="mr-2 h-4 w-4" />
                   Continue with Google
