@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import { CreateQuizForm } from "@/components/create-quiz-form"
+//import { CreateQuizForm } from "@/components/create-quiz-form"
+import { CreateQuizForm } from "@/components/QuizCreator"
 
 export default function CreateQuizPage() {
   return (
@@ -15,6 +16,7 @@ export default function CreateQuizPage() {
             Design your own quiz with custom questions and answers
           </p>
         </div>
+        {/* <CreateQuizForm /> */}
         <CreateQuizForm />
       </main>
       <Footer />

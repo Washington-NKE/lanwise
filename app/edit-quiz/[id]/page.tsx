@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import { QuizGame } from "@/components/QuizDisplay"
+import EditQuizForm from "@/components/EditQuizForm"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function QuizPage({ params }: { params: { id: string } }) {
@@ -27,8 +27,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
             </div>
           }
         >
-          {/* <QuizGame quizId={params.id} /> */}
-          <QuizGame quizId={params.id} />
+          <EditQuizForm quizId={params.id} />
         </Suspense>
       </main>
       <Footer />

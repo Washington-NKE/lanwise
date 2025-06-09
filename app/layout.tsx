@@ -9,8 +9,8 @@ import { AuthProvider } from "@/components/auth-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "QuizMaster - Interactive Quiz Platform",
-  description: "An quiz application with vibrant UI and animations",
+  title: "LanWise - Interactive Quiz Platform",
+  description: "A quiz application with vibrant UI and animations",
 }
 
 export default function RootLayout({
