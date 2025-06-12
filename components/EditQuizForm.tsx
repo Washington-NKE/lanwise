@@ -63,6 +63,11 @@ export default function EditQuizForm() {
   // Load quiz data on component mount
   useEffect(() => {
     const loadQuiz = async () => {
+      if (!quizId || quizId === 'undefined') {
+        setError("Invalid quiz ID")
+        setIsLoading(false)
+        return
+      }
       try {
         const response = await fetch(`/api/user/quizzes/${quizId}`)
         if (!response.ok) {

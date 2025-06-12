@@ -4,7 +4,8 @@ import { Footer } from "@/components/footer"
 import EditQuizForm from "@/components/EditQuizForm"
 import { Skeleton } from "@/components/ui/skeleton"
 
-export default function QuizPage({ params }: { params: { id: string } }) {
+export default async function QuizPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white dark:from-gray-900 dark:to-gray-950">
       <Navbar />
@@ -27,7 +28,7 @@ export default function QuizPage({ params }: { params: { id: string } }) {
             </div>
           }
         >
-          <EditQuizForm quizId={params.id} />
+          <EditQuizForm />
         </Suspense>
       </main>
       <Footer />

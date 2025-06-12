@@ -36,6 +36,7 @@ export const CreateQuizForm = ()=> {
   const [category, setCategory] = useState("")
   const [difficulty, setDifficulty] = useState("")
   const [timeLimit, setTimeLimit] = useState(15)
+  const [quizImageUrl, setQuizImageUrl] = useState("")
   const [questions, setQuestions] = useState<Question[]>([
     {
       id: 1,
@@ -57,6 +58,7 @@ export const CreateQuizForm = ()=> {
   const [isPublic, setIsPublic] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isUploadingQuizImage, setIsUploadingQuizImage] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
 
   const currentQuestion = questions[currentQuestionIndex]
@@ -94,6 +96,66 @@ export const CreateQuizForm = ()=> {
       }
     });
   };
+
+    // Quiz cover image upload handler
+    const handleQuizImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+  
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select a valid image file')
+        return
+      }
+     
+      // Validate file size (e.g., max 5MB)
+      const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+      if (file.size > maxSize) {
+        alert('File size too large. Please select an image smaller than 5MB')
+        return
+      }
+  
+      try {
+        setIsUploadingQuizImage(true)
+        console.log('Starting quiz image upload for file:', file.name, 'Size:', file.size)
+        
+        const formData = new FormData()
+        formData.append("file", file)
+  
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+  
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Upload failed: ${response.status} - ${errorText}`)
+        }
+  
+        const data = await response.json()
+        
+        if (data.url) {
+          setQuizImageUrl(data.url)
+          console.log('Quiz image URL set to:', data.url)
+        } else {
+          throw new Error('No URL returned from upload')
+        }
+        
+      } catch (error) {
+        console.error("Error uploading quiz image:", error)
+        
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          alert("Network error: Unable to connect to upload service. Please check your connection.")
+        } else if (error instanceof Error) {
+          alert(`Upload failed: ${error.message}`)
+        } else {
+          alert("Unknown error occurred during upload. Please try again.")
+        }
+      } finally {
+        setIsUploadingQuizImage(false)
+        e.target.value = ''
+      }
+    }
 
   const handleAddQuestion = () => {
     const newQuestion: Question = {
@@ -247,6 +309,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           difficulty,
           timeLimit,
           isPublic,
+          imageUrl: quizImageUrl,
           questions,
         }),
       });
@@ -314,6 +377,53 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     rows={4}
                   />
                 </div>
+
+                 {/* Quiz Cover Image Upload Section */}
+                 <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Quiz Cover Image (Optional)</Label>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="quiz-image-upload"
+                        onChange={handleQuizImageUpload}
+                        disabled={isUploadingQuizImage}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById("quiz-image-upload")?.click()}
+                        disabled={isUploadingQuizImage}
+                      >
+                        <ImageIcon className="h-4 w-4 mr-1" />
+                        {isUploadingQuizImage ? "Uploading..." : "Upload Cover Image"}
+                      </Button>
+                    </div>
+                  </div>
+                  {quizImageUrl && (
+                    <div className="relative w-full h-48 bg-gray-100 dark:bg-gray-800 rounded-md overflow-hidden">
+                      <img
+                        src={quizImageUrl}
+                        alt="Quiz Cover"
+                        className="w-full h-full object-cover"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-2 right-2 h-8 w-8 p-0"
+                        onClick={() => setQuizImageUrl("")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Upload an attractive cover image for your quiz. This will be displayed on quiz cards.
+                  </p>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="category">Category</Label>
@@ -515,9 +625,9 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     <div className="flex items-center space-x-4">
                       <Slider
                         id="question-points"
-                        min={5}
+                        min={1}
                         max={50}
-                        step={5}
+                        step={1}
                         value={[currentQuestion.points]}
                         onValueChange={(value) => handleQuestionChange("points", value[0])}
                         className="flex-1"

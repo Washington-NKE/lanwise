@@ -7,6 +7,8 @@ import { Target } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import QuizFilters from "@/components/quiz-filters"
 import QuizList from "@/components/quiz-list"
+import { Footer } from "@/components/footer"
+import { Navbar } from "@/components/navbar"
 
 // Define the Quiz type to match your API response format
 export type Quiz = {
@@ -19,6 +21,7 @@ export type Quiz = {
   created_by: number
   created_at: string
   creator_name: string
+  category: string
 }
 
 export default function QuizzesPage() {
@@ -85,9 +88,7 @@ export default function QuizzesPage() {
 
     // Category filter (you might need to add category field to your quiz data)
     if (selectedCategories.length > 0) {
-      // For now, this is disabled since your quiz data doesn't have categories
-      // You can add a category field to your database and enable this
-      // filtered = filtered.filter(quiz => selectedCategories.includes(quiz.category))
+      filtered = filtered.filter(quiz => selectedCategories.includes(quiz.category))
     }
 
     // Difficulty filter
@@ -113,6 +114,7 @@ export default function QuizzesPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white dark:from-gray-900 dark:to-gray-950">
+        <Navbar />
         <div className="container mx-auto px-4 py-12">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">
@@ -176,6 +178,7 @@ export default function QuizzesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white dark:from-gray-900 dark:to-gray-950">
+      <Navbar />
       <div className="container mx-auto px-4 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">
@@ -233,6 +236,7 @@ export default function QuizzesPage() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

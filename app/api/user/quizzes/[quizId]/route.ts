@@ -3,11 +3,88 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import { sql } from '@/lib/db'
-import { NeonQueryFunction } from '@neondatabase/serverless'
+
+// GET handler to fetch quiz data for editing
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ quizId: string }> }
+) {
+  try {
+    const { quizId: quizIdParam } = await params
+    
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const quizId = parseInt(quizIdParam)
+    const userId = parseInt(session.user.id)
+
+    if (isNaN(quizId)) {
+      return NextResponse.json({ error: 'Invalid quiz ID' }, { status: 400 })
+    }
+
+    // Check if quiz exists and user owns it
+    const quizResult = await sql`
+      SELECT * FROM quizzes WHERE id = ${quizId} AND created_by = ${userId}
+    `
+
+    if (quizResult.length === 0) {
+      return NextResponse.json({ error: 'Quiz not found or you don\'t have permission to edit it' }, { status: 404 })
+    }
+
+    const quiz = quizResult[0]
+
+    // Fetch questions for this quiz
+    const questionsResult = await sql`
+      SELECT * FROM questions WHERE quiz_id = ${quizId} ORDER BY order_num
+    `
+
+    // Fetch answers for each question
+    const questions = []
+    for (const question of questionsResult) {
+      const answersResult = await sql`
+        SELECT * FROM answers WHERE question_id = ${question.id} ORDER BY id
+      `
+      
+      questions.push({
+        id: question.id,
+        text: question.text,
+        type: question.type || 'text',
+        language: question.language,
+        points: question.points || 10,
+        timeLimit: question.time_limit || 30,
+        imageUrl: question.image_url,
+        explanation: question.explanation,
+        options: answersResult.map(answer => ({
+          id: answer.id,
+          text: answer.text,
+          isCorrect: answer.is_correct
+        }))
+      })
+    }
+
+    const formattedQuiz = {
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      category: quiz.category,
+      difficulty: quiz.difficulty,
+      timeLimit: quiz.time_limit,
+      isPublic: quiz.is_public,
+      questions
+    }
+
+    return NextResponse.json({ quiz: formattedQuiz })
+  } catch (error) {
+    console.error('Error fetching quiz:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { quizId: string } }
+  { params }: { params: Promise<{ quizId: string }> }
 ) {
   try {
     const { quizId: quizIdParam } = await params
@@ -48,8 +125,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized to delete this quiz' }, { status: 403 })
     }
 
-
-
     // Delete quiz and related data using transaction
     try {
       await sql`BEGIN`;
@@ -77,14 +152,15 @@ export async function DELETE(
     console.error('Error deleting quiz:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ quizId: string }> }
 ) {
   try {
+    const { quizId: quizIdParam } = await params 
+    
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -94,7 +170,7 @@ export async function PUT(
       )
     }
 
-    const quizId = parseInt(params.id)
+    const quizId = parseInt(quizIdParam) // Fixed: use quizIdParam instead of params.id
 
     if (isNaN(quizId)) {
       return NextResponse.json(
@@ -164,11 +240,11 @@ export async function PUT(
       return NextResponse.json({ error: "Quiz not found or you don't have permission to edit it" }, { status: 404 });
     }
 
-    // Use transaction to update quiz, questions, and options
+    // Use transaction to update quiz, questions, and answers
     try {
       await sql`BEGIN`;
 
-      // 2. Update quiz details
+      // Update quiz details
       await sql`
         UPDATE quizzes SET
           title = ${title},
@@ -181,35 +257,42 @@ export async function PUT(
         WHERE id = ${quizId}
       `;
 
-      // 3. Delete existing questions and options
-      await sql`DELETE FROM options WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ${quizId})`;
+      // Delete existing questions and answers (consistent with DELETE function)
+      await sql`
+        DELETE FROM user_answers 
+        WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ${quizId})
+      `;
+      await sql`
+        DELETE FROM answers 
+        WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ${quizId})
+      `;
       await sql`DELETE FROM questions WHERE quiz_id = ${quizId}`;
 
-      // 4. Insert new questions and options
+      // Insert new questions and answers
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         const questionRes = await sql`
-          INSERT INTO questions (quiz_id, text, type, language, points, time_limit, image_url, explanation, "order")
-          VALUES (${quizId}, ${q.text}, ${q.type || 'text'}, ${q.language || null}, ${q.points || 10}, ${q.timeLimit || 30}, ${q.imageUrl || null}, ${q.explanation || null}, ${i})
+          INSERT INTO questions (quiz_id, text, type, language, points, time_limit, image_url, explanation, order_num)
+          VALUES (${quizId}, ${q.text}, ${q.type || 'multiple_choice'}, ${q.language || null}, ${q.points || 10}, ${q.timeLimit || 30}, ${q.imageUrl || null}, ${q.explanation || null}, ${i})
           RETURNING id
         `;
         const questionId = questionRes[0].id;
+        
         for (let j = 0; j < q.options.length; j++) {
           const opt = q.options[j];
           await sql`
-            INSERT INTO options (question_id, text, is_correct, "order")
-            VALUES (${questionId}, ${opt.text}, ${opt.isCorrect}, ${j})
+            INSERT INTO answers (question_id, text, is_correct)
+            VALUES (${questionId}, ${opt.text}, ${opt.isCorrect})
           `;
         }
       }
 
       await sql`COMMIT`;
 
-      // Optionally, fetch and return the updated quiz with questions/options here
-
       return NextResponse.json({ success: true, message: "Quiz updated successfully" });
     } catch (error) {
       await sql`ROLLBACK`;
+      console.error("Transaction error:", error);
       return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 

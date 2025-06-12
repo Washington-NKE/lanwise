@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { sql } from "@/lib/db";
+import { sql, getUserByEmail } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       difficulty,
       timeLimit,
       isPublic,
+      imageUrl, // Add this for quiz cover image
       questions
     } = body;
 
@@ -66,9 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the user ID from the database
-    const [user] = await sql`
-      SELECT id FROM users WHERE email = ${session.user.email}
-    `;
+    const user = await getUserByEmail(session?.user?.email)
 
     if (!user) {
       return NextResponse.json(
@@ -77,7 +76,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the quiz
+    // Create the quiz with image_url field
     const [createdQuiz] = await sql`
       INSERT INTO quizzes (
         title, 
@@ -86,6 +85,7 @@ export async function POST(request: NextRequest) {
         difficulty, 
         time_limit, 
         is_public,
+        image_url,
         created_by,
         created_at,
         updated_at
@@ -97,11 +97,12 @@ export async function POST(request: NextRequest) {
         ${difficulty},
         ${timeLimit},
         ${isPublic || false},
+        ${imageUrl || null},
         ${user.id},
         NOW(),
         NOW()
       )
-      RETURNING id, title, description, category, difficulty, time_limit, is_public, created_at
+      RETURNING id, title, description, category, difficulty, time_limit, is_public, image_url, created_at
     `;
 
     // Add questions and their answers
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
         difficulty: createdQuiz.difficulty,
         timeLimit: createdQuiz.time_limit,
         isPublic: createdQuiz.is_public,
+        imageUrl: createdQuiz.image_url,
         createdAt: createdQuiz.created_at,
         questionCount: questions.length
       }
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Optional: Add GET method to retrieve quizzes for the current user
+// Updated GET method to include image_url
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -184,7 +186,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get user's quizzes
+    // Get user's quizzes including image_url
     const quizzes = await sql`
       SELECT 
         q.id,
@@ -194,6 +196,7 @@ export async function GET(request: NextRequest) {
         q.difficulty,
         q.time_limit,
         q.is_public,
+        q.image_url,
         q.created_at,
         q.updated_at,
         COUNT(quest.id) as question_count
@@ -201,7 +204,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN questions quest ON q.id = quest.quiz_id
       JOIN users u ON q.created_by = u.id
       WHERE u.email = ${session.user.email}
-      GROUP BY q.id, q.title, q.description, q.category, q.difficulty, q.time_limit, q.is_public, q.created_at, q.updated_at
+      GROUP BY q.id, q.title, q.description, q.category, q.difficulty, q.time_limit, q.is_public, q.image_url, q.created_at, q.updated_at
       ORDER BY q.created_at DESC
     `;
 

@@ -379,9 +379,9 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     <div className="flex items-center space-x-4">
                       <Slider
                         id="question-points"
-                        min={5}
+                        min={1}
                         max={50}
-                        step={5}
+                        step={1}
                         value={[currentQuestion.points]}
                         onValueChange={(value) => handleQuestionChange("points", value[0])}
                         className="flex-1"

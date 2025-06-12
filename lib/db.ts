@@ -1,11 +1,36 @@
 import { neon } from "@neondatabase/serverless"
 
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL environment variable is not set. Please add it to your .env.local file."
+  )
+}
+
 // Create a SQL client with the connection string
-const sql = neon(process.env.DATABASE_URL!)
+const sql = neon(process.env.DATABASE_URL)
 
 export { sql }
 
-// User functions
+
+export async function getAllUsers() {
+  try {
+    const users = await sql`
+      SELECT 
+        id,
+        name,
+        email,
+        image,
+        created_at
+      FROM users 
+      ORDER BY created_at DESC
+    `
+    return users
+  } catch (error) {
+    console.error("Error getting all users:", error)
+    throw error
+  }
+}
+
 export async function getUserById(id: number) {
   try {
     const [user] = await sql`
@@ -44,7 +69,78 @@ export async function createUser(name: string, email: string, password: string, 
   }
 }
 
-// Quiz functions
+export async function updateUser(id: number, updates: Partial<{
+  name: string
+  email: string
+  image: string
+  password: string
+}>) {
+  try {
+    // Build the SET clause properly
+    const setFields = Object.entries(updates)
+      .filter(([_, value]) => value !== undefined)
+      .map(([key, _]) => `${key} = $${key}`)
+      .join(', ')
+    
+    if (setFields.length === 0) {
+      throw new Error('No fields to update')
+    }
+    
+    // Create the values object for the query
+    const values = { ...updates, id }
+    
+    const [user] = await sql`
+      UPDATE users 
+      SET ${sql.unsafe(setFields)}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `
+    return user
+  } catch (error) {
+    console.error("Error updating user:", error)
+    throw error
+  }
+}
+
+export async function deleteUser(id: number) {
+  try {
+    // First delete related records to maintain referential integrity
+    await sql`DELETE FROM user_answers WHERE user_id = ${id}`
+    await sql`DELETE FROM user_quiz_progress WHERE user_id = ${id}`
+    
+    // Then delete the user
+    const [deletedUser] = await sql`
+      DELETE FROM users 
+      WHERE id = ${id}
+      RETURNING *
+    `
+    return deletedUser
+  } catch (error) {
+    console.error("Error deleting user:", error)
+    throw error
+  }
+}
+
+export async function createUserWithOAuth(
+  name: string,
+  email: string,
+  image?: string,
+  provider?: string,
+  providerId?: string
+) {
+  try {
+    const [user] = await sql`
+      INSERT INTO users (name, email, image, oauth_provider, oauth_provider_id)
+      VALUES (${name}, ${email}, ${image}, ${provider}, ${providerId})
+      RETURNING *
+    `
+    return user
+  } catch (error) {
+    console.error("Error creating OAuth user:", error)
+    throw error
+  }
+}
+
 export async function getAllQuizzes() {
   try {
     const quizzes = await sql`
@@ -102,7 +198,37 @@ export async function getQuestionAnswers(questionId: number) {
   }
 }
 
-// User progress functions
+export async function deleteQuiz(id: number) {
+  try {
+    // Delete in proper order to maintain referential integrity
+    // First get all questions for this quiz
+    const questions = await sql`SELECT id FROM questions WHERE quiz_id = ${id}`
+    
+    // Delete answers for all questions in this quiz
+    for (const question of questions) {
+      await sql`DELETE FROM answers WHERE question_id = ${question.id}`
+      await sql`DELETE FROM user_answers WHERE question_id = ${question.id}`
+    }
+    
+    // Delete questions
+    await sql`DELETE FROM questions WHERE quiz_id = ${id}`
+    
+    // Delete user progress for this quiz
+    await sql`DELETE FROM user_quiz_progress WHERE quiz_id = ${id}`
+    
+    // Finally delete the quiz
+    const [deletedQuiz] = await sql`
+      DELETE FROM quizzes 
+      WHERE id = ${id}
+      RETURNING *
+    `
+    return deletedQuiz
+  } catch (error) {
+    console.error("Error deleting quiz:", error)
+    throw error
+  }
+}
+
 export async function getUserQuizProgress(userId: number, quizId: number) {
   try {
     const [progress] = await sql`
@@ -123,14 +249,15 @@ export async function createOrUpdateUserQuizProgress(
   completed: boolean,
 ) {
   try {
+    const completedAt = completed ? new Date() : null
     const [progress] = await sql`
       INSERT INTO user_quiz_progress (user_id, quiz_id, score, completed, completed_at)
-      VALUES (${userId}, ${quizId}, ${score}, ${completed}, ${completed ? new Date() : null})
+      VALUES (${userId}, ${quizId}, ${score}, ${completed}, ${completedAt})
       ON CONFLICT (user_id, quiz_id)
       DO UPDATE SET
-        score = ${score},
-        completed = ${completed},
-        completed_at = ${completed ? new Date() : null}
+        score = EXCLUDED.score,
+        completed = EXCLUDED.completed,
+        completed_at = EXCLUDED.completed_at
       RETURNING *
     `
     return progress
@@ -153,9 +280,9 @@ export async function saveUserAnswer(
       VALUES (${userId}, ${questionId}, ${answerId}, ${isCorrect}, ${timeTaken})
       ON CONFLICT (user_id, question_id)
       DO UPDATE SET
-        answer_id = ${answerId},
-        is_correct = ${isCorrect},
-        time_taken = ${timeTaken}
+        answer_id = EXCLUDED.answer_id,
+        is_correct = EXCLUDED.is_correct,
+        time_taken = EXCLUDED.time_taken
       RETURNING *
     `
     return userAnswer
@@ -165,76 +292,92 @@ export async function saveUserAnswer(
   }
 }
 
-// Leaderboard functions
-export async function getLeaderboard() {
+export async function getLeaderboard(period = 'all-time', limit = 100) {
   try {
-    const leaderboard = await sql`
-      SELECT 
-        u.id, 
-        u.name, 
-        u.image,
-        COUNT(DISTINCT uqp.quiz_id) as quizzes_completed,
-        SUM(uqp.score) as total_score
-      FROM users u
-      JOIN user_quiz_progress uqp ON u.id = uqp.user_id
-      WHERE uqp.completed = true
-      GROUP BY u.id, u.name, u.image
-      ORDER BY total_score DESC
-      LIMIT 100
-    `
-    return leaderboard
+    // If running on client side, use fetch to API route
+    if (typeof window !== 'undefined') {
+      const response = await fetch(`/api/leaderboard?period=${period}&limit=${limit}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch leaderboard')
+      }
+      return data.data
+    }
+
+    // If running on server side, use direct database query
+    let leaderboardData
+
+    if (period === 'monthly') {
+      leaderboardData = await sql`
+        SELECT 
+          u.id,
+          u.name,
+          u.image,
+          COUNT(DISTINCT uqp.quiz_id) as quizzes_completed,
+          COALESCE(SUM(uqp.score), 0) as total_score
+        FROM users u
+        LEFT JOIN user_quiz_progress uqp ON u.id = uqp.user_id
+        WHERE uqp.completed = true 
+          AND uqp.completed_at >= DATE_TRUNC('month', CURRENT_DATE)
+        GROUP BY u.id, u.name, u.image
+        HAVING COUNT(DISTINCT uqp.quiz_id) > 0
+        ORDER BY total_score DESC, quizzes_completed DESC
+        LIMIT ${limit}
+      `
+    } else if (period === 'weekly') {
+      leaderboardData = await sql`
+        SELECT 
+          u.id,
+          u.name,
+          u.image,
+          COUNT(DISTINCT uqp.quiz_id) as quizzes_completed,
+          COALESCE(SUM(uqp.score), 0) as total_score
+        FROM users u
+        LEFT JOIN user_quiz_progress uqp ON u.id = uqp.user_id
+        WHERE uqp.completed = true 
+          AND uqp.completed_at >= DATE_TRUNC('week', CURRENT_DATE)
+        GROUP BY u.id, u.name, u.image
+        HAVING COUNT(DISTINCT uqp.quiz_id) > 0
+        ORDER BY total_score DESC, quizzes_completed DESC
+        LIMIT ${limit}
+      `
+    } else {
+      // All-time leaderboard
+      leaderboardData = await sql`
+        SELECT 
+          u.id,
+          u.name,
+          u.image,
+          COUNT(DISTINCT uqp.quiz_id) as quizzes_completed,
+          COALESCE(SUM(uqp.score), 0) as total_score
+        FROM users u
+        LEFT JOIN user_quiz_progress uqp ON u.id = uqp.user_id
+        WHERE uqp.completed = true
+        GROUP BY u.id, u.name, u.image
+        HAVING COUNT(DISTINCT uqp.quiz_id) > 0
+        ORDER BY total_score DESC, quizzes_completed DESC
+        LIMIT ${limit}
+      `
+    }
+
+    return leaderboardData.map((row, index) => ({
+      id: row.id,
+      name: row.name,
+      image: row.image,
+      quizzes_completed: parseInt(row.quizzes_completed.toString()),
+      total_score: parseInt(row.total_score.toString()),
+      rank: index + 1
+    }))
+
   } catch (error) {
     console.error("Error getting leaderboard:", error)
     throw error
   }
 }
 
-
-export async function updateUser(id: number, updates: Partial<{
-  name: string
-  email: string
-  image: string
-  password: string
-}>) {
-  try {
-    const setClause = Object.entries(updates)
-      .map(([key, value]) => `${key} = ${value}`)
-      .join(', ')
-    
-    const [user] = await sql`
-      UPDATE users 
-      SET ${sql.unsafe(setClause)}, updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING *
-    `
-    return user
-  } catch (error) {
-    console.error("Error updating user:", error)
-    throw error
-  }
-}
-
-export async function createUserWithOAuth(
-  name: string,
-  email: string,
-  image?: string,
-  provider?: string,
-  providerId?: string
-) {
-  try {
-    const [user] = await sql`
-      INSERT INTO users (name, email, image, oauth_provider, oauth_provider_id)
-      VALUES (${name}, ${email}, ${image}, ${provider}, ${providerId})
-      RETURNING *
-    `
-    return user
-  } catch (error) {
-    console.error("Error creating OAuth user:", error)
-    throw error
-  }
-}
-
-// For getting recent quizzes (mentioned in your error)
 export async function getUserRecentQuizzes(userId: string, limit: number = 10) {
   try {
     const quizzes = await sql`
@@ -260,7 +403,6 @@ export async function getUserRecentQuizzes(userId: string, limit: number = 10) {
   }
 }
 
-// For getting user's quiz history
 export async function getUserQuizHistory(userId: string) {
   try {
     const quizzes = await sql`
@@ -303,4 +445,3 @@ export async function getUserQuizHistory(userId: string) {
     throw error
   }
 }
-

@@ -27,7 +27,6 @@ export default function QuizPage({ params }: { params: { id: string } }) {
             </div>
           }
         >
-          {/* <QuizGame quizId={params.id} /> */}
           <QuizGame quizId={params.id} />
         </Suspense>
       </main>

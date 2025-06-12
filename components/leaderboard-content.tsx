@@ -10,114 +10,111 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, Trophy, Medal, Award } from "lucide-react"
 
-// Mock data - would be replaced with actual API call
-const users = [
-  {
-    id: 1,
-    name: "Alex Johnson",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 9850,
-    quizzesCompleted: 42,
-    rank: 1,
-  },
-  {
-    id: 2,
-    name: "Sarah Williams",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 9320,
-    quizzesCompleted: 38,
-    rank: 2,
-  },
-  {
-    id: 3,
-    name: "Michael Chen",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 8970,
-    quizzesCompleted: 35,
-    rank: 3,
-  },
-  {
-    id: 4,
-    name: "Emily Davis",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 8540,
-    quizzesCompleted: 33,
-    rank: 4,
-  },
-  {
-    id: 5,
-    name: "David Wilson",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 8120,
-    quizzesCompleted: 30,
-    rank: 5,
-  },
-  {
-    id: 6,
-    name: "Jessica Brown",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 7890,
-    quizzesCompleted: 28,
-    rank: 6,
-  },
-  {
-    id: 7,
-    name: "Daniel Lee",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 7650,
-    quizzesCompleted: 27,
-    rank: 7,
-  },
-  {
-    id: 8,
-    name: "Olivia Martin",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 7320,
-    quizzesCompleted: 25,
-    rank: 8,
-  },
-  {
-    id: 9,
-    name: "James Taylor",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 7100,
-    quizzesCompleted: 24,
-    rank: 9,
-  },
-  {
-    id: 10,
-    name: "Sophia Anderson",
-    avatar: "/placeholder.svg?height=40&width=40",
-    score: 6950,
-    quizzesCompleted: 23,
-    rank: 10,
-  },
-]
+interface LeaderboardUser {
+  id: number
+  name: string
+  image?: string
+  quizzes_completed: number
+  total_score: number
+  rank: number
+}
 
 export function LeaderboardContent() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredUsers, setFilteredUsers] = useState(users)
+  const [users, setUsers] = useState<LeaderboardUser[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<LeaderboardUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [currentPeriod, setCurrentPeriod] = useState("all-time")
 
-  useEffect(() => {
-    // Simulate API call
-    const timer = setTimeout(() => {
+  // Fetch leaderboard data based on period
+  const fetchLeaderboard = async (period: string) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const response = await fetch(`/api/leaderboard?period=${period}&limit=100`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch leaderboard')
+      }
+      
+      setUsers(data.data)
+      setFilteredUsers(data.data)
+    } catch (err) {
+      console.error("Error fetching leaderboard:", err)
+      setError(err instanceof Error ? err.message : "Failed to load leaderboard data")
+      setUsers([])
+      setFilteredUsers([])
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
+  }
 
-    return () => clearTimeout(timer)
-  }, [])
+  // Initial fetch
+  useEffect(() => {
+    fetchLeaderboard(currentPeriod)
+  }, [currentPeriod])
 
+  // Filter users based on search term
   useEffect(() => {
     if (searchTerm.trim() === "") {
       setFilteredUsers(users)
     } else {
-      setFilteredUsers(users.filter((user) => user.name.toLowerCase().includes(searchTerm.toLowerCase())))
+      setFilteredUsers(
+        users.filter((user) => 
+          user.name.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
     }
-  }, [searchTerm])
+  }, [searchTerm, users])
+
+  // Handle tab change
+  const handlePeriodChange = (period: string) => {
+    setCurrentPeriod(period)
+    setSearchTerm("") // Clear search when changing periods
+  }
 
   if (isLoading) {
-    return <div>Loading leaderboard...</div>
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading leaderboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={() => fetchLeaderboard(currentPeriod)}>Try Again</Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (users.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">
+            No quiz results yet for {currentPeriod === 'all-time' ? 'all time' : `this ${currentPeriod.replace('-', ' ')}`}. 
+            Be the first to complete a quiz!
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -140,14 +137,16 @@ export function LeaderboardContent() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="all-time" className="mb-6">
+          <Tabs value={currentPeriod} onValueChange={handlePeriodChange} className="mb-6">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all-time">All Time</TabsTrigger>
               <TabsTrigger value="monthly">Monthly</TabsTrigger>
               <TabsTrigger value="weekly">Weekly</TabsTrigger>
             </TabsList>
-            <TabsContent value="all-time">
+            
+            <TabsContent value={currentPeriod}>
               <div className="space-y-4 mt-4">
+                {/* Top 3 users with special styling */}
                 {filteredUsers.slice(0, 3).map((user, index) => (
                   <motion.div
                     key={user.id}
@@ -174,18 +173,18 @@ export function LeaderboardContent() {
                           </div>
                           <div className="flex-1 flex items-center">
                             <Avatar className="h-12 w-12 mr-4">
-                              <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+                              <AvatarImage src={user.image || "/placeholder.svg"} alt={user.name} />
                               <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                             </Avatar>
                             <div>
                               <div className="font-medium">{user.name}</div>
                               <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {user.quizzesCompleted} quizzes completed
+                                {user.quizzes_completed} quizzes completed
                               </div>
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-2xl font-bold">{user.score.toLocaleString()}</div>
+                            <div className="text-2xl font-bold">{user.total_score.toLocaleString()}</div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">points</div>
                           </div>
                         </div>
@@ -194,94 +193,107 @@ export function LeaderboardContent() {
                   </motion.div>
                 ))}
 
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg overflow-hidden mt-6">
-                  <div className="grid grid-cols-12 text-sm font-medium p-3 border-b border-gray-200 dark:border-gray-700">
-                    <div className="col-span-1 text-center">Rank</div>
-                    <div className="col-span-6">User</div>
-                    <div className="col-span-2 text-center">Quizzes</div>
-                    <div className="col-span-3 text-right">Score</div>
+                {/* Remaining users in table format */}
+                {filteredUsers.length > 3 && (
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg overflow-hidden mt-6">
+                    <div className="grid grid-cols-12 text-sm font-medium p-3 border-b border-gray-200 dark:border-gray-700">
+                      <div className="col-span-1 text-center">Rank</div>
+                      <div className="col-span-6">User</div>
+                      <div className="col-span-2 text-center">Quizzes</div>
+                      <div className="col-span-3 text-right">Score</div>
+                    </div>
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredUsers.slice(3).map((user, index) => (
+                        <motion.div
+                          key={user.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3, delay: (index + 3) * 0.05 }}
+                          className="grid grid-cols-12 items-center p-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          <div className="col-span-1 text-center font-medium">{user.rank}</div>
+                          <div className="col-span-6 flex items-center">
+                            <Avatar className="h-8 w-8 mr-3">
+                              <AvatarImage src={user.image || "/placeholder.svg"} alt={user.name} />
+                              <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="font-medium">{user.name}</div>
+                          </div>
+                          <div className="col-span-2 text-center">{user.quizzes_completed}</div>
+                          <div className="col-span-3 text-right font-medium">{user.total_score.toLocaleString()}</div>
+                        </motion.div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredUsers.slice(3).map((user, index) => (
-                      <motion.div
-                        key={user.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3, delay: (index + 3) * 0.05 }}
-                        className="grid grid-cols-12 items-center p-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        <div className="col-span-1 text-center font-medium">{user.rank}</div>
-                        <div className="col-span-6 flex items-center">
-                          <Avatar className="h-8 w-8 mr-3">
-                            <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
-                            <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <div className="font-medium">{user.name}</div>
-                        </div>
-                        <div className="col-span-2 text-center">{user.quizzesCompleted}</div>
-                        <div className="col-span-3 text-right font-medium">{user.score.toLocaleString()}</div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                )}
 
-                <div className="flex justify-center mt-6">
-                  <Button variant="outline">Load More</Button>
-                </div>
-              </div>
-            </TabsContent>
-            <TabsContent value="monthly">
-              <div className="p-4 text-center">
-                <p className="text-gray-500 dark:text-gray-400">Monthly rankings will be displayed here.</p>
-              </div>
-            </TabsContent>
-            <TabsContent value="weekly">
-              <div className="p-4 text-center">
-                <p className="text-gray-500 dark:text-gray-400">Weekly rankings will be displayed here.</p>
+                {/* Load More button - you can implement pagination here */}
+                {users.length >= 100 && (
+                  <div className="flex justify-center mt-6">
+                    <Button variant="outline" onClick={() => fetchLeaderboard(currentPeriod)}>
+                      Refresh Data
+                    </Button>
+                  </div>
+                )}
               </div>
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
-      <div className="mt-12">
-        <h2 className="text-2xl font-bold mb-6">Category Champions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {["Science", "History", "Geography"].map((category, index) => (
-            <motion.div
-              key={category}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-            >
-              <Card className="overflow-hidden">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-1" />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center">
-                    <Badge className="mr-2">{category}</Badge>
-                    Champion
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center">
-                    <Avatar className="h-12 w-12 mr-4">
-                      <AvatarImage src={users[index].avatar || "/placeholder.svg"} alt={users[index].name} />
-                      <AvatarFallback>{users[index].name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="font-medium">{users[index].name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {Math.floor(users[index].score / 2).toLocaleString()} points
+      {/* Top Performers - Show only if we have users */}
+      {users.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold mb-6">
+            Top Performers - {currentPeriod === 'all-time' ? 'All Time' : currentPeriod.charAt(0).toUpperCase() + currentPeriod.slice(1)}
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {["🏆 Champion", "🥈 Runner-up", "🥉 Third Place"].map((title, index) => {
+              const user = filteredUsers[index]
+              if (!user) return null
+              
+              return (
+                <motion.div
+                  key={title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                >
+                  <Card className="overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-1" />
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center">
+                        <Badge className="mr-2">{title}</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center">
+                        <Avatar className="h-12 w-12 mr-4">
+                          <AvatarImage src={user.image || "/placeholder.svg"} alt={user.name} />
+                          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="font-medium">{user.name}</div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {user.total_score.toLocaleString()} points
+                          </div>
+                        </div>
+                        {index === 0 ? (
+                          <Trophy className="h-6 w-6 text-yellow-500" />
+                        ) : index === 1 ? (
+                          <Medal className="h-6 w-6 text-gray-400" />
+                        ) : (
+                          <Award className="h-6 w-6 text-amber-700" />
+                        )}
                       </div>
-                    </div>
-                    <Trophy className="h-6 w-6 text-yellow-500" />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
